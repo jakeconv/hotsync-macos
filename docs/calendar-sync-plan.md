@@ -128,6 +128,16 @@ Pure Swift types, unit-tested, no I/O:
     those are still needed (daily, weekly on several days, monthly by date,
     monthly on the 2nd Tuesday and on the last Friday, yearly, one with a
     deleted occurrence, one with a note).
+- **Test events on the Visor:** repeat types as documented (1 daily,
+  3 monthly by weekday, 4 monthly by date, 5 yearly); "2nd Tuesday" is
+  repeatOn 9 (week 1 × 7 + Tuesday), "last Friday" 33 (week 4 = last × 7 +
+  Friday). Every repeat record had `03` in the byte after the type. A deleted
+  occurrence is an exception date. Changing one occurrence makes an exception
+  in the repeating event plus a separate single event on that date (with its
+  own note and alarm) - the sync has to map that to a detached occurrence on
+  the Mac. A deleted event without an archive copy comes as attributes 192
+  (deleted + dirty) with no data. Still missing: weekly on chosen days
+  (type 2).
 - **Found on a Palm TX (Palm OS 5.4.9):**
   - Both databases exist, with the same records under the same IDs.
     `CalendarDB-PDat` (creator `PDat`) is the Calendar app's own;
