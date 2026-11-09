@@ -188,6 +188,25 @@ Pure Swift types, unit-tested, no I/O:
   - A deleted record kept as an archive copy comes with attributes 72
     (archived + dirty) and its full data.
 
+**Status: implemented; to be checked with `./Scripts/test.sh` on the Mac.**
+
+- `PalmText`: Windows-1252 both ways, lossless for every byte the Palm
+  stores; `representable(_:)` is what a text looks like after a round trip
+  through the Palm (for the fingerprints in stage 5).
+- `PalmEvent` with `PalmDate`, `PalmTime`, `PalmAlarm`, `PalmRepeat`
+  (`weekdays`, `week`/`weekday` for monthly by day), `PalmEventBlock` and
+  `PalmTimeZone` (`Bd00`): `init(record:format:)` and `encoded(format:)` for
+  `.datebook` and `.calendar`. Undefined flag bits, the reserved repeat bytes,
+  unknown blocks and trailing bytes are kept, so every record comes back byte
+  for byte. `PalmCalendarFormat.detect(in:)` picks the database.
+- `PalmCategories`: the 16 categories of an AppInfo block, lookup by exact
+  name, adding (first free place, desktop IDs 128...255, marked renamed) and
+  renaming; what follows the categories is kept.
+- `CalendarCodecTests.swift`: the test events from the Z22 and the Visor
+  (19 records, plus a made-up one with DateBk's data) round trip byte for byte
+  and decode to what the Palms showed; new events, broken records, text and
+  categories.
+
 ## Stage 3 – The Mac side: EventKit, permission, signing (Opus for conversion, Sonnet for the rest)
 
 **Sonnet:**
