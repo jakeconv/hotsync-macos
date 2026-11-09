@@ -136,8 +136,9 @@ Pure Swift types, unit-tested, no I/O:
   in the repeating event plus a separate single event on that date (with its
   own note and alarm) - the sync has to map that to a detached occurrence on
   the Mac. A deleted event without an archive copy comes as attributes 192
-  (deleted + dirty) with no data. Still missing: weekly on chosen days
-  (type 2).
+  (deleted + dirty) with no data. Weekly is type 2 with the days as a bit
+  mask in repeatOn (bit 0 = Sunday; Tuesday only = `0x04`) and the start of
+  the week (0 = Sunday) in the next byte.
 - **Found on a Palm TX (Palm OS 5.4.9):**
   - Both databases exist, with the same records under the same IDs.
     `CalendarDB-PDat` (creator `PDat`) is the Calendar app's own;
