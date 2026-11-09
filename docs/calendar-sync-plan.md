@@ -154,6 +154,26 @@ Pure Swift types, unit-tested, no I/O:
       not known yet; time zones are probably another block). The codec keeps
       unknown blocks as they are.
   - The category byte is used (0, 1, 2); the names are in the AppInfo block.
+- **Found on a factory-reset Palm Z22 (Palm OS 5.4.9):**
+  - `DatebookDB` exists there too and mirrors `CalendarDB-PDat` (same IDs,
+    same categories, without locations and blocks). So on Palm OS 5.4 both
+    are always present; sync `CalendarDB-PDat`.
+  - Order of the strings: description, note, location (flag `0x02`).
+  - `Bd00` is the event's time zone: offset in minutes from UTC (signed,
+    `fe98` = −360 = UTC−6), 12 bytes of daylight-saving rules, then the name
+    as a C string ("Chicago"). The rules look like the US rules before 2007
+    (first Sunday in April to last Sunday in October), so they cannot be
+    trusted for today's dates: map the name and offset to a macOS time zone
+    (`America/Chicago`) and let macOS do the daylight-saving rules.
+  - "All day" on Palm OS 5 is not a flag: the event gets the day's start and end
+    hours (seen 8:00–18:00). Only "no time" (untimed, `ffff`) maps to an
+    all-day event on the Mac.
+  - The category AppInfo block is the standard one (renamed bits, 16 names
+    of 16 bytes, 16 IDs, last unique ID, padding: a new category got ID 17),
+    followed by the Calendar's own settings, which the codec keeps as they are.
+  - Weekly repeat with an exception, monthly by date and by weekday (2nd
+    Tuesday = 9, last Friday = 33), yearly, a detached occurrence with
+    location: all as on the Visor.
   - Yearly repeats (type 5) as documented; the byte after the repeat type is
     not cleared either (seen `09`).
   - A deleted record kept as an archive copy comes with attributes 72
