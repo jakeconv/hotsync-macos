@@ -34,7 +34,10 @@ ${CC:-cc} -std=c99 -D_DEFAULT_SOURCE -include arpa/inet.h -Wall -Wextra -Werror 
 BIG_HEX="$(head -c 60000 /dev/zero | tr '\0' 'Z' | od -v -An -tx1 | tr -d ' \n')"
 printf 'opendb write MemoDB\nwriterec 0 0 3 %s\nreadall\nend\n' "$BIG_HEX" \
     | "$WORK_DIR/hotsync-session-fake" --port fake: > "$WORK_DIR/big.txt"
-if ! grep -q "\"category\":3,\"data\":\"$BIG_HEX\"" "$WORK_DIR/big.txt"; then
+# compared as strings: macOS grep runs out of memory on a 120 KB pattern
+BIG_RECORD="$(sed -n '/"event":"record"/p' "$WORK_DIR/big.txt")"
+BIG_WANTED="{\"event\":\"record\",\"id\":10485776,\"index\":0,\"attributes\":0,\"category\":3,\"data\":\"$BIG_HEX\"}"
+if [ "$BIG_RECORD" != "$BIG_WANTED" ]; then
     echo "hotsync-session: a 60,000-byte record did not come back unchanged" >&2
     exit 1
 fi
