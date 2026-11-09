@@ -150,9 +150,11 @@ Pure Swift types, unit-tested, no I/O:
       description (for example "Magnet Theatre"). Which comes first when an event
       has both a note and a location is still open.
     - after the strings, optional tagged blocks: 4-character ID, 2-byte
-      length, data. Seen: `Bd01` with 4 bytes, on untimed events only (meaning
-      not known yet; time zones are probably another block). The codec keeps
-      unknown blocks as they are.
+      length, data. `Bd00` is the time zone (see the Z22 below). `Bd01`
+      (4 bytes, `00010000`) is added by the Calendar app to every "no time"
+      event it creates; untimed events from older Palms work without it. The
+      codec keeps every block as it is, and a new untimed event written to
+      `CalendarDB-PDat` gets `Bd01` like one made on the Palm.
   - The category byte is used (0, 1, 2); the names are in the AppInfo block.
 - **Found on a factory-reset Palm Z22 (Palm OS 5.4.9):**
   - `DatebookDB` exists there too and mirrors `CalendarDB-PDat` (same IDs,
