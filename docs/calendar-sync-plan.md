@@ -128,9 +128,25 @@ Pure Swift types, unit-tested, no I/O:
     those are still needed (daily, weekly on several days, monthly by date,
     monthly on the 2nd Tuesday and on the last Friday, yearly, one with a
     deleted occurrence, one with a note).
-- To verify on a real 5.4 device: does the Calendar app still keep `DatebookDB`
-  up to date as well? The design assumes it does not, and syncs `CalendarDB-PDat`
-  only.
+- **Found on a Palm TX (Palm OS 5.4.9):**
+  - Both databases exist, with the same records under the same IDs.
+    `CalendarDB-PDat` (creator `PDat`) is the Calendar app's own;
+    `DatebookDB` is a copy the OS keeps for older applications, without the
+    new fields. Sync `CalendarDB-PDat` only. To check in stage 7: after the
+    sync writes to `CalendarDB-PDat`, does the OS update `DatebookDB` too?
+  - `CalendarDB-PDat` records are the Date Book layout plus:
+    - flag `0x02` = a location, stored as one more string after the
+      description (for example "Magnet Theatre"). Which comes first when an event
+      has both a note and a location is still open.
+    - after the strings, optional tagged blocks: 4-character ID, 2-byte
+      length, data. Seen: `Bd01` with 4 bytes, on untimed events only (meaning
+      not known yet; time zones are probably another block). The codec keeps
+      unknown blocks as they are.
+  - The category byte is used (0, 1, 2); the names are in the AppInfo block.
+  - Yearly repeats (type 5) as documented; the byte after the repeat type is
+    not cleared either (seen `09`).
+  - A deleted record kept as an archive copy comes with attributes 72
+    (archived + dirty) and its full data.
 
 ## Stage 3 – The Mac side: EventKit, permission, signing (Opus for conversion, Sonnet for the rest)
 
