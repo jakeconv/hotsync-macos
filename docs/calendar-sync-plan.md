@@ -165,6 +165,13 @@ Pure Swift types, unit-tested, no I/O:
     (first Sunday in April to last Sunday in October), so they cannot be
     trusted for today's dates: map the name and offset to a macOS time zone
     (`America/Chicago`) and let macOS do the daylight-saving rules.
+  - The start and end times of an event with a time zone are in *that*
+    zone: 16:00–17:00 with "Chicago" on a Palm set to New York shows as
+    "5 PM … (4pm CST)". Events without the block are in the Palm's own time
+    (the Mac's current time zone, as decided above).
+  - "No time" shows as a bullet at the top of the day (untimed, `ffff`);
+    "All day" stores the day's start and end hours as a normal timed event
+    and stays a timed event on the Mac.
   - "All day" on Palm OS 5 is not a flag: the event gets the day's start and end
     hours (seen 8:00–18:00). Only "no time" (untimed, `ffff`) maps to an
     all-day event on the Mac.
