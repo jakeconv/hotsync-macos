@@ -112,6 +112,22 @@ Pure Swift types, unit-tested, no I/O:
   own Palms (OS 3.0 and 5.4). Every record must decode and encode back to
   exactly the same bytes. The tests contain a few anonymised records, not personal
   data.
+- **Found on a Handspring Visor (Palm OS 3.1, `DatebookDB` with Datebook+):**
+  - The byte after the flags byte is not cleared by the Palm (random values
+    such as `d2`, `c1`, `0a`). The codec keeps it, or records would not come
+    back byte for byte.
+  - Datebook+/DateBk keeps its own data in the note: lines starting with `##`
+    (here `##f` and `##c`, most likely a floating event and a completed one),
+    together with flag bits `0x01`/`0x02` that the classic Date Book does not
+    define. The codec keeps unknown bits and `##` lines unchanged on the Palm.
+    They do not go into the Mac note, and an edit from the Mac does not lose
+    them.
+  - Alarm units as documented: an alarm of 0 minutes is "at the start time";
+    unit 2 is days.
+  - The sample had no repeating events and no exceptions: test records with
+    those are still needed (daily, weekly on several days, monthly by date,
+    monthly on the 2nd Tuesday and on the last Friday, yearly, one with a
+    deleted occurrence, one with a note).
 - To verify on a real 5.4 device: does the Calendar app still keep `DatebookDB`
   up to date as well? The design assumes it does not, and syncs `CalendarDB-PDat`
   only.

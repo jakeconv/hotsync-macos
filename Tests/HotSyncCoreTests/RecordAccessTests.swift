@@ -37,6 +37,18 @@ import Testing
     #expect(SessionEvent.parse(#"{"event":"dbListFinished","count":2}"#) == .databaseListFinished(count: 2))
 }
 
+/// As a Handspring Visor (Palm OS 3.1) reports a database that was never
+/// backed up: pilot-link's "never" (0x83DAC000) is no date.
+@Test func neverBackedUpIsNoDate() {
+    let line = #"{"event":"db","name":"DatebookDB","type":1145132097,"creator":1684108389,"flags":8,"version":0,"modnum":50,"createDate":1794017312,"modifyDate":1794232574,"backupDate":2212151296}"#
+    guard case .database(let info) = SessionEvent.parse(line) else {
+        Issue.record("not a database")
+        return
+    }
+    #expect(info.backedUp == nil)
+    #expect(info.modified == Date(timeIntervalSince1970: 1_794_232_574))
+}
+
 @Test func databaseEvents() {
     #expect(SessionEvent.parse(#"{"event":"dbOpened","name":"DatebookDB","records":4}"#)
             == .databaseOpened(name: "DatebookDB", records: 4))

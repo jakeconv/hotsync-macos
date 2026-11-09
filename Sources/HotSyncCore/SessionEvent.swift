@@ -162,9 +162,13 @@ public enum SessionEvent: Equatable, Sendable {
         }
     }
 
-    /// Unix time from the tool; 0 or less (never, or the Palm's 1904) is nil
+    /// pilot-link's value for a date the Palm never set (its 1904 epoch,
+    /// 0x83DAC000), e.g. the backup date of a database never backed up
+    static let palmNeverDate: Int64 = 0x83DA_C000
+
+    /// Unix time from the tool; 0 or less and pilot-link's "never" are nil
     private static func date(_ seconds: Int64?) -> Date? {
-        guard let seconds, seconds > 0 else { return nil }
+        guard let seconds, seconds > 0, seconds != palmNeverDate else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(seconds))
     }
 
