@@ -109,7 +109,10 @@ user ID; when such a Palm connects, assign it once.
 
 ## Building
 
-Unit tests (file checks, session protocol, Palm recognition, chains): `./Scripts/test.sh`
+Unit tests (file checks, session protocol, Palm recognition, chains): `./Scripts/test.sh`. Once
+`./Scripts/build.sh` has built the pilot-link headers, it also runs `hotsync-session` against an
+in-memory Palm (`Tools/hotsync-session/tests`): every record command, compared with
+`expected.txt`.
 
 Requirements: macOS 14+, Swift and C command line tools, and from Homebrew:
 
@@ -166,7 +169,11 @@ Once, after the first start:
 - `hotsync-session`: a small C tool on libpisock (pilot-link), one process per port. It accepts the
   connection, reports the Palm's user name and ID, and then installs what the app tells it to
   &ndash; that is how a file can never end up on the wrong Palm. Events go to the app as one JSON
-  object per line, instructions come back on stdin
+  object per line, instructions come back on stdin. For the calendar sync that is being built
+  (see [docs/calendar-sync-plan.md](docs/calendar-sync-plan.md)), it also reads and writes single
+  records: `listdbs`, `opendb`, `readall`, `readchanged`, `writerec`, `deleterec`,
+  `readappinfo`/`writeappinfo`, `resetflags`, `syncinfo`/`setsyncpc` (documented at the top of
+  `hotsync-session.c`)
 - IOKit (serial adapters coming and going)
 - FSEvents (file watcher)
 - UserNotifications

@@ -66,6 +66,36 @@ New commands and events in `hotsync-session.c`, records as hex in the JSON:
 **Done when** a test command can dump and rewrite the Date Book records of an
 OS 3.0 and an OS 5.4 Palm unchanged.
 
+**Status: implemented; to be checked on the real Palms.**
+
+- `hotsync-session.c`: the commands above, plus `closedb`. Command lines may now
+  be of any length (a 64 KB record is a 128 KB line). An open database is closed
+  before the HotSync ends.
+- `HotSyncCore`: `PalmRecord`, `PalmRecordAttributes`, `PalmDatabaseInfo`,
+  `PalmSyncInfo` (`canFastSync(withPC:)`), `SessionCommand` (every command, with
+  the values checked), and the new `SessionEvent` cases. `SessionRunner` gets
+  `send(_: SessionCommand)`. The app does not use any of it yet.
+- Tests: `Tools/hotsync-session/tests/run.sh` builds the tool against
+  `fake-pisock.c`, an in-memory Palm, runs `commands.txt` and compares with
+  `expected.txt`, plus a 60,000-byte record. `RecordAccessTests.swift` checks the
+  Swift side and that it understands every line of `expected.txt`.
+  `./Scripts/test.sh` runs both.
+
+**Checking it on a real Palm** (quit HotSync first, so the port is free):
+
+```bash
+HotSync.app/Contents/Resources/hotsync-session --port usb:
+```
+
+Press HotSync on the Palm. After the `connected` line, type commands, e.g.
+`syncinfo`, `listdbs`, `opendb read DatebookDB` (on the 5.4 Palm also
+`opendb read CalendarDB-PDat`), `readappinfo`, `readall`, `readchanged`,
+`closedb`, `end`. To check writing, rewrite one record with its own data:
+`opendb write DatebookDB`, then `writerec <id> <attributes> <category> <data>` with
+the values from its `record` line (attributes 16 if it was private, else 0), then
+`readall` again: the record must come back with the same data. Do not `resetflags` or `setsyncpc` on a Palm that syncs with another
+desktop, since they change what that desktop sees as changed.
+
 ## Stage 2 – Calendar formats in `HotSyncCore` (Opus)
 
 Pure Swift types, unit-tested, no I/O:

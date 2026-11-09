@@ -43,6 +43,30 @@ public enum SessionEvent: Equatable, Sendable {
     case romFinished(file: String, bytes: Int)
     /// Palm OS 5 and later: the ROM cannot be read over HotSync
     case romUnsupported(version: String)
+
+    // Records (for syncing)
+
+    /// one database of `listdbs`
+    case database(PalmDatabaseInfo)
+    case databaseListFinished(count: Int)
+    case databaseOpened(name: String, records: Int)
+    case databaseClosed
+    /// one record of `readall` / `readchanged`
+    case record(PalmRecord)
+    case recordsFinished(count: Int)
+    /// written with this ID (the Palm's, for a new record)
+    case recordWritten(id: UInt32)
+    case recordDeleted(id: UInt32)
+    case appInfo(Data)
+    case appInfoWritten(bytes: Int)
+    case syncFlagsReset
+    case syncInfo(PalmSyncInfo)
+    case syncPCWritten(UInt32)
+    /// A record command failed: `operation` is the command ("opendb",
+    /// "writerec", ...), `recordId` the record it was about, if any.
+    /// `palmOSError` 0 with `noDatabaseOpen`: no `opendb` before.
+    case databaseFailed(operation: String, palmOSError: Int, recordId: UInt32?, noDatabaseOpen: Bool)
+
     case finished
     case error(stage: String, message: String)
 
@@ -65,6 +89,83 @@ public enum SessionEvent: Equatable, Sendable {
         let unchanged: Int?
         let failed: Int?
         let version: String?
+        // records
+        let name: String?
+        let id: UInt32?
+        let attributes: UInt8?
+        let category: Int?
+        let data: String?
+        let records: Int?
+        let count: Int?
+        let type: UInt32?
+        let creator: UInt32?
+        let flags: Int?
+        let modnum: Int?
+        let createDate: Int64?
+        let modifyDate: Int64?
+        let backupDate: Int64?
+        let lastSyncPC: UInt32?
+        let lastSyncDate: Int64?
+        let successfulSyncDate: Int64?
+        let op: String?
+        let dbVersion: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case event, port, user, userId, romVersion, file, bytes, reason, palmOSError, stage,
+                 message, directory, index, total, saved, unchanged, failed, name, id, attributes,
+                 category, data, records, count, type, creator, flags, modnum, createDate,
+                 modifyDate, backupDate, lastSyncPC, lastSyncDate, successfulSyncDate, op
+            // "version" is a text for the ROM ("4.1.0") and a number for a
+            // database: decoded by hand below
+            case version
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            event = try c.decode(String.self, forKey: .event)
+            port = try c.decodeIfPresent(String.self, forKey: .port)
+            user = try c.decodeIfPresent(String.self, forKey: .user)
+            userId = try c.decodeIfPresent(UInt32.self, forKey: .userId)
+            romVersion = try c.decodeIfPresent(UInt32.self, forKey: .romVersion)
+            file = try c.decodeIfPresent(String.self, forKey: .file)
+            bytes = try c.decodeIfPresent(Int.self, forKey: .bytes)
+            reason = try c.decodeIfPresent(String.self, forKey: .reason)
+            palmOSError = try c.decodeIfPresent(Int.self, forKey: .palmOSError)
+            stage = try c.decodeIfPresent(String.self, forKey: .stage)
+            message = try c.decodeIfPresent(String.self, forKey: .message)
+            directory = try c.decodeIfPresent(String.self, forKey: .directory)
+            index = try c.decodeIfPresent(Int.self, forKey: .index)
+            total = try c.decodeIfPresent(Int.self, forKey: .total)
+            saved = try c.decodeIfPresent(Int.self, forKey: .saved)
+            unchanged = try c.decodeIfPresent(Int.self, forKey: .unchanged)
+            failed = try c.decodeIfPresent(Int.self, forKey: .failed)
+            version = try? c.decodeIfPresent(String.self, forKey: .version)
+            dbVersion = try? c.decodeIfPresent(Int.self, forKey: .version)
+            name = try c.decodeIfPresent(String.self, forKey: .name)
+            id = try c.decodeIfPresent(UInt32.self, forKey: .id)
+            attributes = try c.decodeIfPresent(UInt8.self, forKey: .attributes)
+            category = try c.decodeIfPresent(Int.self, forKey: .category)
+            data = try c.decodeIfPresent(String.self, forKey: .data)
+            records = try c.decodeIfPresent(Int.self, forKey: .records)
+            count = try c.decodeIfPresent(Int.self, forKey: .count)
+            type = try c.decodeIfPresent(UInt32.self, forKey: .type)
+            creator = try c.decodeIfPresent(UInt32.self, forKey: .creator)
+            flags = try c.decodeIfPresent(Int.self, forKey: .flags)
+            modnum = try c.decodeIfPresent(Int.self, forKey: .modnum)
+            createDate = try c.decodeIfPresent(Int64.self, forKey: .createDate)
+            modifyDate = try c.decodeIfPresent(Int64.self, forKey: .modifyDate)
+            backupDate = try c.decodeIfPresent(Int64.self, forKey: .backupDate)
+            lastSyncPC = try c.decodeIfPresent(UInt32.self, forKey: .lastSyncPC)
+            lastSyncDate = try c.decodeIfPresent(Int64.self, forKey: .lastSyncDate)
+            successfulSyncDate = try c.decodeIfPresent(Int64.self, forKey: .successfulSyncDate)
+            op = try c.decodeIfPresent(String.self, forKey: .op)
+        }
+    }
+
+    /// Unix time from the tool; 0 or less (never, or the Palm's 1904) is nil
+    private static func date(_ seconds: Int64?) -> Date? {
+        guard let seconds, seconds > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(seconds))
     }
 
     /// Reads one output line; nil for anything that is not a known event
@@ -124,6 +225,53 @@ public enum SessionEvent: Equatable, Sendable {
             return .romFinished(file: file, bytes: bytes)
         case "romUnsupported":
             return .romUnsupported(version: l.version ?? "")
+        case "db":
+            guard let name = l.name, let type = l.type, let creator = l.creator else { return nil }
+            return .database(PalmDatabaseInfo(
+                name: name, type: FourCC.string(type), creator: FourCC.string(creator),
+                flags: l.flags ?? 0, version: l.dbVersion ?? 0, modificationNumber: l.modnum ?? 0,
+                created: date(l.createDate), modified: date(l.modifyDate), backedUp: date(l.backupDate)))
+        case "dbListFinished":
+            guard let count = l.count else { return nil }
+            return .databaseListFinished(count: count)
+        case "dbOpened":
+            guard let name = l.name else { return nil }
+            return .databaseOpened(name: name, records: l.records ?? 0)
+        case "dbClosed":
+            return .databaseClosed
+        case "record":
+            guard let id = l.id, let index = l.index, let attributes = l.attributes,
+                  let category = l.category, let hex = l.data, let data = Hex.decode(hex) else { return nil }
+            return .record(PalmRecord(id: id, index: index,
+                                      attributes: PalmRecordAttributes(rawValue: attributes),
+                                      category: category, data: data))
+        case "recordsFinished":
+            guard let count = l.count else { return nil }
+            return .recordsFinished(count: count)
+        case "recordWritten":
+            guard let id = l.id else { return nil }
+            return .recordWritten(id: id)
+        case "recordDeleted":
+            guard let id = l.id else { return nil }
+            return .recordDeleted(id: id)
+        case "appInfo":
+            guard let hex = l.data, let data = Hex.decode(hex) else { return nil }
+            return .appInfo(data)
+        case "appInfoWritten":
+            return .appInfoWritten(bytes: l.bytes ?? 0)
+        case "flagsReset":
+            return .syncFlagsReset
+        case "syncInfo":
+            guard let pc = l.lastSyncPC else { return nil }
+            return .syncInfo(PalmSyncInfo(lastSyncPC: pc, lastSync: date(l.lastSyncDate),
+                                          lastSuccessfulSync: date(l.successfulSyncDate)))
+        case "syncInfoWritten":
+            guard let pc = l.lastSyncPC else { return nil }
+            return .syncPCWritten(pc)
+        case "dbFailed":
+            guard let op = l.op else { return nil }
+            return .databaseFailed(operation: op, palmOSError: l.palmOSError ?? 0, recordId: l.id,
+                                   noDatabaseOpen: l.reason == "noDatabaseOpen")
         case "finished":
             return .finished
         case "error":

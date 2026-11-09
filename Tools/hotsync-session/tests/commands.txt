@@ -1,0 +1,27 @@
+syncinfo
+listdbs
+readall
+opendb write NoSuchDB
+opendb write DatebookDB
+readall
+readchanged
+readappinfo
+writerec 0 0 0 6e6577
+writerec 10485761 64 1 434C45414E
+writerec 0 0 0 abc
+writerec 1 2
+deleterec 10485764
+deleterec 999
+writeappinfo 0002576f726b
+readappinfo
+resetflags
+readchanged
+readall
+setsyncpc 31337
+closedb
+readall
+opendb read MemoDB
+readall
+readappinfo
+frobnicate
+end

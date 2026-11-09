@@ -1,0 +1,40 @@
+{"event":"listening","port":"fake:"}
+{"event":"connected","user":"Fake Palm","userId":4711,"romVersion":50343936}
+{"event":"syncInfo","lastSyncPC":1234567,"lastSyncDate":1000000100,"successfulSyncDate":1000000000}
+{"event":"db","name":"DatebookDB","type":1145132097,"creator":1684108389,"flags":0,"version":1,"modnum":42,"createDate":1000000000,"modifyDate":1000000500,"backupDate":0}
+{"event":"db","name":"MemoDB","type":1145132097,"creator":1835363695,"flags":0,"version":1,"modnum":42,"createDate":1000000000,"modifyDate":1000000500,"backupDate":0}
+{"event":"dbListFinished","count":2}
+{"event":"dbFailed","op":"readall","reason":"noDatabaseOpen"}
+{"event":"dbFailed","op":"opendb","error":-301,"palmOSError":5}
+{"event":"dbOpened","name":"DatebookDB","records":4}
+{"event":"record","id":10485761,"index":0,"attributes":0,"category":0,"data":"636c65616e"}
+{"event":"record","id":10485762,"index":1,"attributes":64,"category":0,"data":"6469727479"}
+{"event":"record","id":10485763,"index":2,"attributes":128,"category":0,"data":""}
+{"event":"record","id":10485764,"index":3,"attributes":16,"category":2,"data":"70726976617465"}
+{"event":"recordsFinished","count":4}
+{"event":"record","id":10485762,"index":1,"attributes":64,"category":0,"data":"6469727479"}
+{"event":"record","id":10485763,"index":2,"attributes":128,"category":0,"data":""}
+{"event":"recordsFinished","count":2}
+{"event":"appInfo","data":"0001556e66696c6564"}
+{"event":"recordWritten","id":10485776,"requestedId":0}
+{"event":"recordWritten","id":10485761,"requestedId":10485761}
+{"event":"error","stage":"writerec","message":"invalid hex data"}
+{"event":"error","stage":"writerec","message":"usage: writerec <id> <attributes> <category> <hex>"}
+{"event":"recordDeleted","id":10485764}
+{"event":"dbFailed","op":"deleterec","error":-301,"palmOSError":5,"id":999}
+{"event":"appInfoWritten","bytes":6}
+{"event":"appInfo","data":"0002576f726b"}
+{"event":"flagsReset"}
+{"event":"recordsFinished","count":0}
+{"event":"record","id":10485761,"index":0,"attributes":0,"category":1,"data":"434c45414e"}
+{"event":"record","id":10485762,"index":1,"attributes":0,"category":0,"data":"6469727479"}
+{"event":"record","id":10485776,"index":2,"attributes":0,"category":0,"data":"6e6577"}
+{"event":"recordsFinished","count":3}
+{"event":"syncInfoWritten","lastSyncPC":31337}
+{"event":"dbClosed"}
+{"event":"dbFailed","op":"readall","reason":"noDatabaseOpen"}
+{"event":"dbOpened","name":"MemoDB","records":0}
+{"event":"recordsFinished","count":0}
+{"event":"appInfo","data":""}
+{"event":"error","stage":"command","message":"unknown command: frobnicate"}
+{"event":"finished"}

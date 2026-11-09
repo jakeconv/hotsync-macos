@@ -23,6 +23,21 @@
  *                              (nur die seit der letzten Sicherung geänderten)
  *             getrom <Ordner>  das ROM nach <Ordner>/PalmOS-<Version>.rom
  *                              auslesen (nur Palm OS 1-4)
+ *           Datensätze (für den Abgleich, siehe "Datensätze" unten):
+ *             listdbs          die Datenbanken im RAM auflisten
+ *             opendb read|write <Name>   eine Datenbank öffnen
+ *             closedb          sie schließen
+ *             readall          alle Datensätze lesen
+ *             readchanged      nur die geänderten/gelöschten lesen
+ *             writerec <ID> <Attribute> <Kategorie> <Hex>
+ *                              Datensatz schreiben (ID 0: neu)
+ *             deleterec <ID>   Datensatz löschen
+ *             readappinfo      AppInfo-Block (Kategorien) lesen
+ *             writeappinfo <Hex>   AppInfo-Block schreiben
+ *             resetflags       nach dem Abgleich: Gelöschte entfernen,
+ *                              "geändert" zurücksetzen
+ *             syncinfo         letzter Rechner und Zeitpunkt des Abgleichs
+ *             setsyncpc <ID>   dieser Rechner hat gerade abgeglichen
  *             end              Sitzung sauber beenden
  *
  * Exit:     0 Sitzung beendet, 1 Fehler, 2 kein Palm innerhalb des Timeouts
@@ -36,6 +51,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <utime.h>
 #include <unistd.h>
 
@@ -725,6 +741,409 @@ static void write_user(int sd, const char *args)
 	emit_end();
 }
 
+/* ---- Datensätze ------------------------------------------------------- */
+
+/* Für den Abgleich (Kalender, später Adressen, Aufgaben, Notizen) liest und
+ * schreibt die App einzelne Datensätze einer Datenbank. Die Bytes eines
+ * Datensatzes gehen als Hex durch die JSON-Zeilen und kommen so zurück - was
+ * darin steht, wertet nur die App aus (HotSyncCore).
+ *
+ * Es ist immer höchstens eine Datenbank offen ("opendb"), alle
+ * Datensatz-Anweisungen gelten für sie. Schlägt eine Anweisung fehl, kommt
+ * "dbFailed" mit der Anweisung und dem Palm-OS-Fehler. */
+
+static int open_db = -1;
+static char open_db_name[64];
+
+static void emit_hex(const char *key, const unsigned char *data, size_t length)
+{
+	static const char digits[] = "0123456789abcdef";
+	size_t i;
+
+	printf(",\"%s\":\"", key);
+	for (i = 0; i < length; i++) {
+		putchar(digits[data[i] >> 4]);
+		putchar(digits[data[i] & 0x0F]);
+	}
+	putchar('"');
+}
+
+/* Hex (gerade Länge, Groß- oder Kleinbuchstaben) in Bytes. Die Länge kommt
+ * in *length; -1 bei ungültigem Hex. Leerer Text = 0 Bytes. */
+static int parse_hex(const char *hex, unsigned char **data, size_t *length)
+{
+	size_t n = strlen(hex), i;
+	unsigned char *out;
+
+	if (n % 2 != 0)
+		return -1;
+	out = malloc(n / 2 + 1);
+	if (out == NULL)
+		return -1;
+	for (i = 0; i < n / 2; i++) {
+		int hi, lo;
+		char h = hex[2 * i], l = hex[2 * i + 1];
+
+		hi = h >= '0' && h <= '9' ? h - '0' : h >= 'a' && h <= 'f' ? h - 'a' + 10 :
+			h >= 'A' && h <= 'F' ? h - 'A' + 10 : -1;
+		lo = l >= '0' && l <= '9' ? l - '0' : l >= 'a' && l <= 'f' ? l - 'a' + 10 :
+			l >= 'A' && l <= 'F' ? l - 'A' + 10 : -1;
+		if (hi < 0 || lo < 0) {
+			free(out);
+			return -1;
+		}
+		out[i] = (unsigned char)(hi << 4 | lo);
+	}
+	*data = out;
+	*length = n / 2;
+	return 0;
+}
+
+static void emit_db_failed(const char *op, int sd, long record_id)
+{
+	emit_begin("dbFailed");
+	emit_str("op", op, 0);
+	emit_int("error", pi_error(sd));
+	emit_int("palmOSError", pi_palmos_error(sd));
+	if (record_id >= 0)
+		emit_int("id", record_id);
+	emit_end();
+}
+
+/* Für Anweisungen, die eine offene Datenbank brauchen */
+static int need_open_db(const char *op)
+{
+	if (open_db >= 0)
+		return 1;
+	emit_begin("dbFailed");
+	emit_str("op", op, 0);
+	emit_str("reason", "noDatabaseOpen", 0);
+	emit_end();
+	return 0;
+}
+
+/* "listdbs": alle Datenbanken im RAM, je eine Zeile "db", am Ende
+ * "dbListFinished". Typ und Creator als Zahl (vier Zeichen, big-endian),
+ * Datumsangaben als Unix-Zeit (0: nie). */
+static void list_dbs(int sd)
+{
+	int index = 0, count = 0;
+	pi_buffer_t *buffer = pi_buffer_new(sizeof(struct DBInfo));
+
+	if (buffer == NULL) {
+		emit_error("listdbs", "out of memory");
+		return;
+	}
+	while (dlp_ReadDBList(sd, 0, dlpDBListRAM, index, buffer) >= 0) {
+		struct DBInfo info;
+
+		memcpy(&info, buffer->data, sizeof(struct DBInfo));
+		index = info.index + 1;
+		emit_begin("db");
+		emit_str("name", info.name, 1);
+		emit_int("type", (long)info.type);
+		emit_int("creator", (long)info.creator);
+		emit_int("flags", (long)info.flags);
+		emit_int("version", (long)info.version);
+		emit_int("modnum", (long)info.modnum);
+		emit_int("createDate", (long)info.createDate);
+		emit_int("modifyDate", (long)info.modifyDate);
+		emit_int("backupDate", (long)info.backupDate);
+		emit_end();
+		count++;
+	}
+	pi_buffer_free(buffer);
+	/* das Ende der Liste meldet der Palm als "nicht gefunden" */
+	if (pi_palmos_error(sd) != dlpErrNotFound || !pi_socket_connected(sd)) {
+		emit_db_failed("listdbs", sd, -1);
+		return;
+	}
+	emit_begin("dbListFinished");
+	emit_int("count", count);
+	emit_end();
+}
+
+static void close_db(int sd)
+{
+	if (open_db < 0)
+		return;
+	dlp_CloseDB(sd, open_db);
+	open_db = -1;
+	open_db_name[0] = '\0';
+}
+
+/* "opendb read|write <Name>": öffnet die Datenbank, auch mit den als
+ * privat markierten Datensätzen. Eine schon offene wird vorher
+ * geschlossen. Meldet "dbOpened" mit der Zahl der Datensätze. */
+static void open_database(int sd, const char *args)
+{
+	char name[64];
+	int mode, handle, records = 0;
+
+	if (strncmp(args, "read ", 5) == 0) {
+		mode = dlpOpenRead | dlpOpenSecret;
+		args += 5;
+	} else if (strncmp(args, "write ", 6) == 0) {
+		mode = dlpOpenReadWrite | dlpOpenSecret;
+		args += 6;
+	} else {
+		emit_error("opendb", "usage: opendb read|write <name>");
+		return;
+	}
+	close_db(sd);
+
+	utf8_to_cp1252(args, name, sizeof(name));
+	if (dlp_OpenDB(sd, 0, mode, name, &handle) < 0) {
+		emit_db_failed("opendb", sd, -1);
+		return;
+	}
+	open_db = handle;
+	snprintf(open_db_name, sizeof(open_db_name), "%s", name);
+	dlp_ReadOpenDBInfo(sd, handle, &records);
+
+	emit_begin("dbOpened");
+	emit_str("name", open_db_name, 1);
+	emit_int("records", records);
+	emit_end();
+}
+
+static void emit_record(const pi_buffer_t *buffer, recordid_t id, int index,
+	int attributes, int category)
+{
+	emit_begin("record");
+	emit_int("id", (long)id);
+	emit_int("index", index);
+	emit_int("attributes", attributes);
+	emit_int("category", category);
+	emit_hex("data", buffer->data, buffer->used);
+	emit_end();
+}
+
+/* Wie oft beim Lesen nach "Abbrechen" auf dem Palm geschaut wird */
+#define RECORDS_CANCEL_EVERY	16
+
+/* "readall": jeder Datensatz der offenen Datenbank als "record", auch die
+ * gelöschten und archivierten (am Attribut zu erkennen).
+ * "readchanged": nur die seit dem letzten Abgleich geänderten, gelöschten
+ * und archivierten. Beide enden mit "recordsFinished". */
+static void read_records(int sd, int changed_only)
+{
+	const char *op = changed_only ? "readchanged" : "readall";
+	pi_buffer_t *buffer;
+	int count = 0, total = 0;
+
+	if (!need_open_db(op))
+		return;
+	/* readall: so viele, wie die Datenbank meldet (wie pi_file_retrieve);
+	 * readchanged: bis der Palm "nicht gefunden" meldet */
+	if (changed_only ? dlp_ResetDBIndex(sd, open_db) < 0
+			 : dlp_ReadOpenDBInfo(sd, open_db, &total) < 0) {
+		emit_db_failed(op, sd, -1);
+		return;
+	}
+	buffer = pi_buffer_new(0xFFFF);
+	if (buffer == NULL) {
+		emit_error(op, "out of memory");
+		return;
+	}
+
+	while (changed_only || count < total) {
+		recordid_t id = 0;
+		int index = count, attributes = 0, category = 0, result;
+
+		if (count > 0 && count % RECORDS_CANCEL_EVERY == 0 && dlp_OpenConduit(sd) < 0) {
+			emit_error(op, "cancelled on the Palm or connection lost");
+			pi_buffer_free(buffer);
+			return;
+		}
+		if (changed_only)
+			result = dlp_ReadNextModifiedRec(sd, open_db, buffer, &id, &index,
+				&attributes, &category);
+		else
+			result = dlp_ReadRecordByIndex(sd, open_db, count, buffer, &id,
+				&attributes, &category);
+		if (result < 0) {
+			/* das Ende der geänderten meldet der Palm als "nicht gefunden" */
+			if (changed_only && pi_palmos_error(sd) == dlpErrNotFound
+				&& pi_socket_connected(sd))
+				break;
+			emit_db_failed(op, sd, -1);
+			pi_buffer_free(buffer);
+			return;
+		}
+		emit_record(buffer, id, index, attributes, category);
+		count++;
+	}
+	pi_buffer_free(buffer);
+
+	emit_begin("recordsFinished");
+	emit_int("count", count);
+	emit_end();
+}
+
+/* "writerec <ID> <Attribute> <Kategorie> <Hex>": schreibt einen Datensatz.
+ * ID 0 legt einen neuen an, sonst wird der mit dieser ID ersetzt (oder mit
+ * ihr angelegt). Meldet "recordWritten" mit der ID, die der Palm vergeben
+ * hat. */
+static void write_record(int sd, const char *args)
+{
+	unsigned long id, attributes, category;
+	recordid_t new_id = 0;
+	unsigned char *data;
+	size_t length;
+	int consumed = 0;
+
+	if (!need_open_db("writerec"))
+		return;
+	if (sscanf(args, "%lu %lu %lu %n", &id, &attributes, &category, &consumed) != 3
+		|| consumed == 0 || attributes > 0xFF || category > 0x0F) {
+		emit_error("writerec", "usage: writerec <id> <attributes> <category> <hex>");
+		return;
+	}
+	if (parse_hex(args + consumed, &data, &length) < 0) {
+		emit_error("writerec", "invalid hex data");
+		return;
+	}
+	if (dlp_WriteRecord(sd, open_db, (int)attributes, (recordid_t)id, (int)category,
+			data, length, &new_id) < 0) {
+		emit_db_failed("writerec", sd, (long)id);
+	} else {
+		emit_begin("recordWritten");
+		emit_int("id", (long)new_id);
+		emit_int("requestedId", (long)id);
+		emit_end();
+	}
+	free(data);
+}
+
+/* "deleterec <ID>": löscht den Datensatz endgültig */
+static void delete_record(int sd, const char *args)
+{
+	char *end;
+	unsigned long id = strtoul(args, &end, 10);
+
+	if (!need_open_db("deleterec"))
+		return;
+	if (end == args || *end != '\0' || id == 0) {
+		emit_error("deleterec", "usage: deleterec <id>");
+		return;
+	}
+	if (dlp_DeleteRecord(sd, open_db, 0, (recordid_t)id) < 0) {
+		emit_db_failed("deleterec", sd, (long)id);
+		return;
+	}
+	emit_begin("recordDeleted");
+	emit_int("id", (long)id);
+	emit_end();
+}
+
+/* "readappinfo": der AppInfo-Block (u. a. die Kategorienamen) als
+ * "appInfo"; eine Datenbank ohne Block meldet leere Daten. */
+static void read_app_info(int sd)
+{
+	pi_buffer_t *buffer;
+
+	if (!need_open_db("readappinfo"))
+		return;
+	buffer = pi_buffer_new(0xFFFF);
+	if (buffer == NULL) {
+		emit_error("readappinfo", "out of memory");
+		return;
+	}
+	if (dlp_ReadAppBlock(sd, open_db, 0, -1, buffer) < 0
+		&& pi_palmos_error(sd) != dlpErrNotFound) {
+		emit_db_failed("readappinfo", sd, -1);
+		pi_buffer_free(buffer);
+		return;
+	}
+	emit_begin("appInfo");
+	emit_hex("data", buffer->data, buffer->used);
+	emit_end();
+	pi_buffer_free(buffer);
+}
+
+/* "writeappinfo <Hex>": ersetzt den AppInfo-Block */
+static void write_app_info(int sd, const char *hex)
+{
+	unsigned char *data = NULL;
+	size_t length = 0;
+
+	if (!need_open_db("writeappinfo"))
+		return;
+	/* leer hieße "Block entfernen" - das braucht der Abgleich nie */
+	if (parse_hex(hex, &data, &length) < 0 || length == 0) {
+		emit_error("writeappinfo", "invalid hex data");
+		free(data);
+		return;
+	}
+	if (dlp_WriteAppBlock(sd, open_db, data, length) < 0) {
+		emit_db_failed("writeappinfo", sd, -1);
+	} else {
+		emit_begin("appInfoWritten");
+		emit_int("bytes", (long)length);
+		emit_end();
+	}
+	free(data);
+}
+
+/* "resetflags": nach einem gelungenen Abgleich - entfernt die gelöschten
+ * und archivierten Datensätze endgültig und setzt die "geändert"-Markierung
+ * aller übrigen zurück. */
+static void reset_flags(int sd)
+{
+	if (!need_open_db("resetflags"))
+		return;
+	if (dlp_CleanUpDatabase(sd, open_db) < 0) {
+		emit_db_failed("resetflags", sd, -1);
+		return;
+	}
+	if (dlp_ResetSyncFlags(sd, open_db) < 0) {
+		emit_db_failed("resetflags", sd, -1);
+		return;
+	}
+	emit_begin("flagsReset");
+	emit_end();
+}
+
+/* "syncinfo": mit welchem Rechner der Palm zuletzt abgeglichen hat und
+ * wann. Ist es dieser Mac, genügen die geänderten Datensätze ("readchanged",
+ * fast sync), sonst muss alles verglichen werden (slow sync). */
+static void sync_info(void)
+{
+	emit_begin("syncInfo");
+	emit_int("lastSyncPC", (long)palm_user.lastSyncPC);
+	emit_int("lastSyncDate", (long)palm_user.lastSyncDate);
+	emit_int("successfulSyncDate", (long)palm_user.successfulSyncDate);
+	emit_end();
+}
+
+/* "setsyncpc <ID>": nach einem gelungenen Abgleich - dieser Mac (ID aus den
+ * Einstellungen der App, nie 0) war der letzte, jetzt. */
+static void set_sync_pc(int sd, const char *args)
+{
+	char *end;
+	unsigned long id = strtoul(args, &end, 10);
+	struct PilotUser user = palm_user;
+
+	if (end == args || *end != '\0' || id == 0) {
+		emit_error("setsyncpc", "usage: setsyncpc <id>");
+		return;
+	}
+	user.lastSyncPC = id;
+	user.lastSyncDate = time(NULL);
+	user.successfulSyncDate = user.lastSyncDate;
+	if (dlp_WriteUserInfo(sd, &user) < 0) {
+		emit_error("setsyncpc", "unable to write user info (%d, PalmOS 0x%04x)",
+			pi_error(sd), pi_palmos_error(sd));
+		return;
+	}
+	palm_user = user;
+
+	emit_begin("syncInfoWritten");
+	emit_int("lastSyncPC", (long)user.lastSyncPC);
+	emit_end();
+}
+
 /* Abstand der Lebenszeichen an den Palm, solange keine Anweisung kommt -
  * ohne sie bricht der Palm die Sitzung nach einer Weile ab. */
 #define TICKLE_INTERVAL_MS	5000
@@ -755,13 +1174,16 @@ static int wait_for_command(int sd)
  * Sitzung trotzdem sauber beendet, damit der Palm nicht hängen bleibt. */
 static void run_commands(int sd)
 {
-	char line[4096];
+	/* Datensätze als Hex: eine Zeile kann weit über 100 KB lang sein */
+	char *line = NULL;
+	size_t capacity = 0;
+	ssize_t length;
 
 	/* ungepuffert: was poll() als lesbar meldet, liegt nicht schon in
 	 * einem stdio-Puffer, auf den poll() nicht schaut */
 	setvbuf(stdin, NULL, _IONBF, 0);
 
-	while (wait_for_command(sd) && fgets(line, sizeof(line), stdin) != NULL) {
+	while (wait_for_command(sd) && (length = getline(&line, &capacity, stdin)) >= 0) {
 		line[strcspn(line, "\r\n")] = '\0';
 
 		if (strncmp(line, "install ", 8) == 0) {
@@ -772,6 +1194,32 @@ static void run_commands(int sd)
 			get_rom(sd, line + 7);
 		} else if (strncmp(line, "setuser ", 8) == 0) {
 			write_user(sd, line + 8);
+		} else if (strcmp(line, "listdbs") == 0) {
+			list_dbs(sd);
+		} else if (strncmp(line, "opendb ", 7) == 0) {
+			open_database(sd, line + 7);
+		} else if (strcmp(line, "closedb") == 0) {
+			close_db(sd);
+			emit_begin("dbClosed");
+			emit_end();
+		} else if (strcmp(line, "readall") == 0) {
+			read_records(sd, 0);
+		} else if (strcmp(line, "readchanged") == 0) {
+			read_records(sd, 1);
+		} else if (strncmp(line, "writerec ", 9) == 0) {
+			write_record(sd, line + 9);
+		} else if (strncmp(line, "deleterec ", 10) == 0) {
+			delete_record(sd, line + 10);
+		} else if (strcmp(line, "readappinfo") == 0) {
+			read_app_info(sd);
+		} else if (strncmp(line, "writeappinfo ", 13) == 0) {
+			write_app_info(sd, line + 13);
+		} else if (strcmp(line, "resetflags") == 0) {
+			reset_flags(sd);
+		} else if (strcmp(line, "syncinfo") == 0) {
+			sync_info();
+		} else if (strncmp(line, "setsyncpc ", 10) == 0) {
+			set_sync_pc(sd, line + 10);
 		} else if (strncmp(line, "log ", 4) == 0) {
 			char entry[1024];
 			utf8_to_cp1252(line + 4, entry, sizeof(entry));
@@ -781,9 +1229,12 @@ static void run_commands(int sd)
 		} else if (strcmp(line, "end") == 0) {
 			break;
 		} else if (line[0] != '\0') {
-			emit_error("command", "unknown command: %s", line);
+			emit_error("command", "unknown command: %.200s", line);
 		}
 	}
+	free(line);
+	/* eine offene Datenbank vor dem Ende des HotSyncs schließen */
+	close_db(sd);
 }
 
 int main(int argc, char **argv)

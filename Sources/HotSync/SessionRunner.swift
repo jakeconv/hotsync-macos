@@ -85,6 +85,19 @@ final class SessionRunner {
         }
     }
 
+    /// Eine Anweisung als `SessionCommand` - für den Abgleich. false, wenn
+    /// sie sich nicht senden lässt (ungültige Werte, siehe `line`); dann
+    /// kommt dafür auch kein Ereignis.
+    @discardableResult
+    func send(_ command: SessionCommand) -> Bool {
+        guard let line = command.line else {
+            DebugLog.shared.log("[\(port)] not sent, invalid: \(command)", source: "Session")
+            return false
+        }
+        send(line)
+        return true
+    }
+
     /// Bricht ab: Solange kein Palm verbunden ist, wartet das Werkzeug nur -
     /// beenden ist dann folgenlos. Während einer Übertragung lässt nur der
     /// Kill den Palm aus dem Sync heraus (wie bei pilot-xfer).

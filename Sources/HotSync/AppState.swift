@@ -769,6 +769,12 @@ final class AppState {
         case .finished:
             break
 
+        // Datensätze: noch von keinem Ablauf angefordert (Abgleich folgt)
+        case .database, .databaseListFinished, .databaseOpened, .databaseClosed, .record,
+             .recordsFinished, .recordWritten, .recordDeleted, .appInfo, .appInfoWritten,
+             .syncFlagsReset, .syncInfo, .syncPCWritten, .databaseFailed:
+            break
+
         case .error(_, let message) where session.stage == .dumpingROM:
             // ein Fehler beendet das Auslesen; die Sitzung selbst ist heil
             session.romResult = .failed(message: message)
