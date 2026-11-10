@@ -367,13 +367,16 @@ private func z22AppInfo() -> Data {
 
 @Test func addingCategories() throws {
     var categories = try PalmCategories(appInfo: z22AppInfo())
-    let work = try #require(categories.add(named: "Work"))
+    let added = categories.add(named: "Work")
+    let work = try #require(added)
     #expect(work == 4)
     #expect(categories.id(at: 4) == 128)  // first desktop ID
     #expect(categories.renamed & (1 << 4) != 0)
-    #expect(categories.add(named: "Work") == 4)  // already there
+    let again = categories.add(named: "Work")
+    #expect(again == 4)  // already there
     // at most 15 bytes, as the Palm keeps it
-    let long = try #require(categories.add(named: "A very long calendar name"))
+    let addedLong = categories.add(named: "A very long calendar name")
+    let long = try #require(addedLong)
     #expect(categories.name(at: long) == "A very long cal")
     #expect(categories.id(at: long) == 129)
     #expect(categories.index(named: "A very long calendar name") == long)
@@ -384,7 +387,8 @@ private func z22AppInfo() -> Data {
     // all 16 used
     for i in 0..<10 { _ = categories.add(named: "C\(i)") }
     #expect(categories.used.count == 16)
-    #expect(categories.add(named: "One more") == nil)
+    let oneMore = categories.add(named: "One more")
+    #expect(oneMore == nil)
 }
 
 @Test func renamingCategories() throws {
