@@ -66,7 +66,7 @@ New commands and events in `hotsync-session.c`, records as hex in the JSON:
 **Done when** a test command can dump and rewrite the Date Book records of an
 OS 3.0 and an OS 5.4 Palm unchanged.
 
-**Status: implemented; to be checked on the real Palms.**
+**Status: done. Reading checked on a Visor (Palm OS 3.1), a Palm TX and a Palm Z22 (Palm OS 5.4.9); writing to a real Palm is checked in stage 4.**
 
 - `hotsync-session.c`: the commands above, plus `closedb`. Command lines may now
   be of any length (a 64 KB record is a 128 KB line). An open database is closed
@@ -188,7 +188,7 @@ Pure Swift types, unit-tested, no I/O:
   - A deleted record kept as an archive copy comes with attributes 72
     (archived + dirty) and its full data.
 
-**Status: implemented; to be checked with `./Scripts/test.sh` on the Mac.**
+**Status: done. All 70 tests pass on the Mac (macOS 14, arm64).**
 
 - `PalmText`: Windows-1252 both ways, lossless for every byte the Palm
   stores; `representable(_:)` is what a text looks like after a round trip
